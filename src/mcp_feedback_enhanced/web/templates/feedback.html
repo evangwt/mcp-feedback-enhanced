@@ -674,6 +674,25 @@
                 </div>
 
                 <div class="session-panel-content">
+                    <!-- 活躍會話列表 -->
+                    <div class="active-sessions-section">
+                        <div class="active-sessions-header">
+                            <h4 data-i18n="sessionManagement.activeSessions">活躍會話</h4>
+                            <div class="active-sessions-controls">
+                                <div class="session-count">
+                                    <span class="active-count" id="activeSessionCount">0</span>
+                                    <span data-i18n="sessionManagement.activeSessionsCount">個活躍會話</span>
+                                </div>
+                                <button class="btn-icon" id="refreshActiveSessions" data-i18n-title="sessionManagement.refresh" title="重新整理活躍會話">
+                                    🔄
+                                </button>
+                            </div>
+                        </div>
+                        <div class="active-sessions-list" id="activeSessionsList">
+                            <div class="no-sessions" data-i18n="sessionManagement.noActiveSessions">暫無活躍會話</div>
+                        </div>
+                    </div>
+
                     <!-- 當前活躍會話 -->
                     <div class="current-session-section">
                         <h4 data-i18n="sessionManagement.currentSession">當前會話</h4>

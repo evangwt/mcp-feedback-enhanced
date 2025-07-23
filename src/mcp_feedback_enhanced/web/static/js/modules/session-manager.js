@@ -80,8 +80,14 @@
             },
             onDataChanged: function() {
                 self.handleDataChanged();
+            },
+            onActiveSessionsLoaded: function(activeSessions) {
+                self.handleActiveSessionsLoaded(activeSessions);
             }
         });
+
+        // 初始化時載入活躍會話
+        this.loadActiveSessions();
     };
 
     /**
@@ -231,6 +237,35 @@
     };
 
     /**
+     * 處理活躍會話載入
+     */
+    SessionManager.prototype.handleActiveSessionsLoaded = function(activeSessions) {
+        console.log('📋 處理活躍會話載入:', activeSessions.length, '個會話');
+        
+        // 找到當前會話
+        const currentSession = activeSessions.find(session => session.is_current);
+        const currentSessionId = currentSession ? currentSession.session_id : null;
+        
+        // 使用 UI 渲染器顯示活躍會話
+        if (this.uiRenderer && this.uiRenderer.renderActiveSessions) {
+            this.uiRenderer.renderActiveSessions(activeSessions, currentSessionId);
+        } else {
+            console.warn('📋 UI 渲染器未準備好或缺少 renderActiveSessions 方法');
+        }
+    };
+
+    /**
+     * 載入活躍會話
+     */
+    SessionManager.prototype.loadActiveSessions = function() {
+        if (this.dataManager && this.dataManager.loadActiveSessions) {
+            this.dataManager.loadActiveSessions();
+        } else {
+            console.warn('📋 數據管理器未準備好或缺少 loadActiveSessions 方法');
+        }
+    };
+
+    /**
      * 設置事件監聽器
      */
     SessionManager.prototype.setupEventListeners = function() {
@@ -246,6 +281,16 @@
         if (refreshButton) {
             refreshButton.addEventListener('click', function() {
                 self.refreshSessionData();
+            });
+        }
+
+        // 刷新活躍會話按鈕
+        const refreshActiveSessionsButton = DOMUtils ?
+            DOMUtils.safeQuerySelector('#refreshActiveSessions') :
+            document.querySelector('#refreshActiveSessions');
+        if (refreshActiveSessionsButton) {
+            refreshActiveSessionsButton.addEventListener('click', function() {
+                self.loadActiveSessions();
             });
         }
 

@@ -781,6 +781,175 @@
     };
 
     /**
+     * 渲染活躍會話列表
+     */
+    SessionUIRenderer.prototype.renderActiveSessions = function(activeSessions, currentSessionId) {
+        const activeSessionsList = document.getElementById('activeSessionsList');
+        const activeSessionCount = document.getElementById('activeSessionCount');
+        
+        if (!activeSessionsList || !activeSessionCount) {
+            if (DEBUG_MODE) console.warn('活躍會話列表元素未找到');
+            return;
+        }
+
+        // 更新活躍會話數量
+        activeSessionCount.textContent = activeSessions.length;
+
+        if (activeSessions.length === 0) {
+            activeSessionsList.innerHTML = '<div class="no-sessions" data-i18n="sessionManagement.noActiveSessions">暫無活躍會話</div>';
+            return;
+        }
+
+        // 渲染活躍會話卡片
+        const sessionsHTML = activeSessions.map(session => {
+            const isCurrentSession = session.session_id === currentSessionId;
+            const statusClass = this._getStatusClass(session.status);
+            const createdTime = TimeUtils.formatDateTime(session.created_at);
+            const duration = TimeUtils.calculateTimeDifference(session.created_at, Date.now());
+            
+            return `
+                <div class="session-card ${isCurrentSession ? 'current' : ''}" data-session-id="${session.session_id}">
+                    <div class="session-header">
+                        <div class="session-id">會話: ${session.session_id.substring(0, 8)}...</div>
+                        <div class="session-status">
+                            <span class="status-badge ${statusClass}">${StatusUtils.getStatusText(session.status)}</span>
+                        </div>
+                    </div>
+                    <div class="session-info">
+                        <div class="session-time">建立: ${createdTime}</div>
+                        <div class="session-duration">持續: ${duration}</div>
+                        <div class="session-project">專案: ${this._truncateText(session.project_directory, 40)}</div>
+                        <div class="session-summary">摘要: ${this._truncateText(session.summary, 60)}</div>
+                    </div>
+                    <div class="session-actions">
+                        ${!isCurrentSession ? 
+                            `<button class="session-switch-btn" data-session-id="${session.session_id}">切換到此會話</button>` : 
+                            '<span class="current-indicator">當前活躍會話</span>'
+                        }
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        activeSessionsList.innerHTML = sessionsHTML;
+
+        // 添加切換會話的事件監聽器
+        this._bindSessionSwitchEvents();
+
+        if (DEBUG_MODE) console.log(`🎨 渲染了 ${activeSessions.length} 個活躍會話`);
+    };
+
+    /**
+     * 綁定會話切換事件
+     */
+    SessionUIRenderer.prototype._bindSessionSwitchEvents = function() {
+        const switchButtons = document.querySelectorAll('.session-switch-btn');
+        
+        switchButtons.forEach(button => {
+            button.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const sessionId = button.getAttribute('data-session-id');
+                
+                if (!sessionId) return;
+
+                // 禁用按鈕並顯示載入狀態
+                button.disabled = true;
+                button.textContent = '切換中...';
+
+                try {
+                    await this._switchSession(sessionId);
+                } catch (error) {
+                    console.error('切換會話失敗:', error);
+                    // 恢復按鈕狀態
+                    button.disabled = false;
+                    button.textContent = '切換到此會話';
+                }
+            });
+        });
+    };
+
+    /**
+     * 執行會話切換
+     */
+    SessionUIRenderer.prototype._switchSession = function(sessionId) {
+        return new Promise((resolve, reject) => {
+            fetch('/api/switch-session', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ session_id: sessionId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    if (DEBUG_MODE) console.log(`✅ 成功切換到會話: ${sessionId}`);
+                    
+                    // 刷新活躍會話列表
+                    this._refreshActiveSessions();
+                    
+                    // 觸發頁面刷新以更新 UI
+                    window.location.reload();
+                    
+                    resolve(data);
+                } else {
+                    reject(new Error(data.error || '切換會話失敗'));
+                }
+            })
+            .catch(error => {
+                console.error('切換會話請求失敗:', error);
+                reject(error);
+            });
+        });
+    };
+
+    /**
+     * 刷新活躍會話列表
+     */
+    SessionUIRenderer.prototype._refreshActiveSessions = function() {
+        fetch('/api/active-sessions')
+            .then(response => response.json())
+            .then(data => {
+                if (data.sessions) {
+                    // 找到當前會話
+                    const currentSession = data.sessions.find(s => s.is_current);
+                    const currentSessionId = currentSession ? currentSession.session_id : null;
+                    
+                    // 重新渲染活躍會話列表
+                    this.renderActiveSessions(data.sessions, currentSessionId);
+                }
+            })
+            .catch(error => {
+                console.error('獲取活躍會話失敗:', error);
+            });
+    };
+
+    /**
+     * 截斷文字
+     */
+    SessionUIRenderer.prototype._truncateText = function(text, maxLength) {
+        if (!text) return text;
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    };
+
+    /**
+     * 獲取狀態樣式類
+     */
+    SessionUIRenderer.prototype._getStatusClass = function(status) {
+        const statusMapping = {
+            'waiting': 'waiting',
+            'active': 'active',
+            'feedback_submitted': 'submitted',
+            'completed': 'completed',
+            'error': 'error',
+            'timeout': 'timeout',
+            'expired': 'expired'
+        };
+        return statusMapping[status] || 'unknown';
+    };
+
+    /**
      * 清理資源
      */
     SessionUIRenderer.prototype.cleanup = function() {

@@ -736,6 +736,43 @@
     };
 
     /**
+     * 載入活躍會話列表
+     */
+    SessionDataManager.prototype.loadActiveSessions = function() {
+        const self = this;
+        
+        console.log('📊 載入活躍會話列表...');
+        
+        fetch('/api/active-sessions')
+            .then(function(response) {
+                if (response.ok) {
+                    return response.json();
+                } else {
+                    throw new Error('獲取活躍會話失敗: ' + response.status);
+                }
+            })
+            .then(function(data) {
+                if (data && Array.isArray(data.sessions)) {
+                    console.log('📊 成功載入', data.sessions.length, '個活躍會話');
+                    
+                    // 更新 UI 渲染器顯示活躍會話
+                    if (self.onActiveSessionsLoaded) {
+                        self.onActiveSessionsLoaded(data.sessions);
+                    }
+                    
+                    return data.sessions;
+                } else {
+                    console.warn('📊 活躍會話回應格式錯誤:', data);
+                    return [];
+                }
+            })
+            .catch(function(error) {
+                console.warn('📊 載入活躍會話失敗:', error);
+                return [];
+            });
+    };
+
+    /**
      * 立即保存當前會話到伺服器
      */
     SessionDataManager.prototype.saveCurrentSessionToServer = function() {
