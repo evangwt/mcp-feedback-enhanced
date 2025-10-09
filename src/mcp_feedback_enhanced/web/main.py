@@ -327,52 +327,37 @@ class WebUIManager:
             raise RuntimeError(f"Templates directory not found: {web_templates_path}")
 
     def create_session(self, project_directory: str, summary: str) -> str:
-        """創建新的回饋會話 - 重構為單一活躍會話模式，保留標籤頁狀態"""
-        # 保存舊會話的引用和 WebSocket 連接
+        """創建新的回饋會話 - 支援多重活躍會話模式"""
+        # 保存當前會話的 WebSocket 連接（如果存在）
         old_session = self.current_session
         old_websocket = None
         if old_session and old_session.websocket:
             old_websocket = old_session.websocket
-            debug_log("保存舊會話的 WebSocket 連接以發送更新通知")
+            debug_log("保存當前會話的 WebSocket 連接以轉移到新會話")
 
         # 創建新會話
         session_id = str(uuid.uuid4())
         session = WebFeedbackSession(session_id, project_directory, summary)
 
-        # 如果有舊會話，處理狀態轉換和清理
+        # 處理舊會話：保持其活躍狀態，不自動完成
         if old_session:
             debug_log(
-                f"處理舊會話 {old_session.session_id} 的狀態轉換，當前狀態: {old_session.status.value}"
+                f"保留舊會話 {old_session.session_id} 的狀態: {old_session.status.value}"
             )
 
             # 保存標籤頁狀態到全局
             if hasattr(old_session, "active_tabs"):
                 self._merge_tabs_to_global(old_session.active_tabs)
 
-            # 如果舊會話是已提交狀態，進入下一步（已完成）
-            if old_session.status == SessionStatus.FEEDBACK_SUBMITTED:
-                debug_log(
-                    f"舊會話 {old_session.session_id} 進入下一步：已提交 → 已完成"
-                )
-                success = old_session.next_step("反饋已處理，會話完成")
-                if success:
-                    debug_log(f"✅ 舊會話 {old_session.session_id} 成功進入已完成狀態")
-                else:
-                    debug_log(f"❌ 舊會話 {old_session.session_id} 無法進入下一步")
-            else:
-                debug_log(
-                    f"舊會話 {old_session.session_id} 狀態為 {old_session.status.value}，無需轉換"
-                )
+            # 清空舊會話的 WebSocket 連接（將轉移到新會話）
+            if old_session.websocket:
+                old_session.websocket = None
+                debug_log(f"清空舊會話 {old_session.session_id} 的 WebSocket 連接")
 
-            # 確保舊會話仍在字典中（用於API獲取）
-            if old_session.session_id in self.sessions:
-                debug_log(f"舊會話 {old_session.session_id} 仍在會話字典中")
-            else:
-                debug_log(f"⚠️ 舊會話 {old_session.session_id} 不在會話字典中，重新添加")
+            # 確保舊會話仍在字典中
+            if old_session.session_id not in self.sessions:
+                debug_log(f"將舊會話 {old_session.session_id} 保存到會話字典")
                 self.sessions[old_session.session_id] = old_session
-
-            # 同步清理會話資源（但保留 WebSocket 連接）
-            old_session._cleanup_sync()
 
         # 將全局標籤頁狀態繼承到新會話
         session.active_tabs = self.global_active_tabs.copy()
@@ -384,12 +369,14 @@ class WebUIManager:
 
         debug_log(f"創建新的活躍會話: {session_id}")
         debug_log(f"繼承 {len(session.active_tabs)} 個活躍標籤頁")
+        if old_session:
+            debug_log(f"保留舊會話 {old_session.session_id} 為活躍狀態")
 
         # 處理WebSocket連接轉移
         if old_websocket:
             # 直接轉移連接到新會話，消息發送由 smart_open_browser 統一處理
             session.websocket = old_websocket
-            debug_log("已將舊 WebSocket 連接轉移到新會話")
+            debug_log("已將 WebSocket 連接轉移到新會話")
         else:
             # 沒有舊連接，標記需要發送會話更新通知（當新 WebSocket 連接建立時）
             self._pending_session_update = True
@@ -404,6 +391,53 @@ class WebUIManager:
     def get_current_session(self) -> WebFeedbackSession | None:
         """獲取當前活躍會話"""
         return self.current_session
+
+    def get_active_sessions(self) -> list[WebFeedbackSession]:
+        """獲取所有活躍會話（未完成的會話）"""
+        from .models import SessionStatus
+        
+        active_sessions = []
+        for session in self.sessions.values():
+            # 只返回未進入終態的會話
+            if not session.is_terminal():
+                active_sessions.append(session)
+        
+        # 按創建時間排序（最新的在前）
+        active_sessions.sort(key=lambda s: s.created_at, reverse=True)
+        debug_log(f"找到 {len(active_sessions)} 個活躍會話")
+        return active_sessions
+
+    def switch_to_session(self, session_id: str) -> bool:
+        """切換到指定會話"""
+        target_session = self.sessions.get(session_id)
+        if not target_session:
+            debug_log(f"會話 {session_id} 不存在，無法切換")
+            return False
+        
+        if target_session.is_terminal():
+            debug_log(f"會話 {session_id} 已結束，無法切換")
+            return False
+        
+        old_session = self.current_session
+        old_websocket = None
+        
+        # 保存舊會話的 WebSocket 連接
+        if old_session and old_session.websocket:
+            old_websocket = old_session.websocket
+            # 清空舊會話的 WebSocket 連接
+            old_session.websocket = None
+            debug_log(f"從舊會話 {old_session.session_id} 保存 WebSocket 連接")
+        
+        # 設置新的當前會話
+        self.current_session = target_session
+        
+        # 轉移 WebSocket 連接到新會話
+        if old_websocket:
+            target_session.websocket = old_websocket
+            debug_log(f"將 WebSocket 連接轉移到會話 {session_id}")
+        
+        debug_log(f"已切換到會話 {session_id}")
+        return True
 
     def remove_session(self, session_id: str):
         """移除回饋會話"""

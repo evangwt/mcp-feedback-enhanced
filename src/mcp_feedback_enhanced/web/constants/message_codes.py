@@ -44,6 +44,9 @@ class MessageCodes:
     SESSION_HISTORY_LOADED = "session.historyLoaded"
     SESSION_MANUAL_CLEANUP = "session.manualCleanup"
     SESSION_ERROR_CLEANUP = "session.errorCleanup"
+    SESSION_SWITCHED = "session.switched"
+    SESSION_NOT_FOUND = "session.notFound"
+    SESSION_SWITCH_FAILED = "session.switchFailed"
 
     # ========== 設定相關 ==========
     SETTINGS_SAVED = "settingsAPI.saved"
@@ -134,6 +137,10 @@ LEGACY_KEY_MAPPING = {
     "invalid_log_level": "SETTINGS_INVALID_LOG_LEVEL",
     "log_level_updated": "SETTINGS_LOG_LEVEL_UPDATED",
     "set_failed": "SETTINGS_SET_FAILED",
+    "session_switched": "SESSION_SWITCHED",
+    "session_not_found": "SESSION_NOT_FOUND",
+    "switch_session_failed": "SESSION_SWITCH_FAILED",
+    "invalid_session_id": "ERROR_INVALID_INPUT",
 }
 
 

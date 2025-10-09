@@ -255,6 +255,86 @@ def setup_routes(manager: "WebUIManager"):
                 },
             )
 
+    @manager.app.get("/api/active-sessions")
+    async def get_active_sessions():
+        """獲取所有活躍會話（未完成的會話）"""
+        try:
+            active_sessions = manager.get_active_sessions()
+            sessions_data = []
+            
+            for session in active_sessions:
+                session_info = {
+                    "session_id": session.session_id,
+                    "project_directory": session.project_directory,
+                    "summary": session.summary,
+                    "status": session.status.value,
+                    "status_message": session.status_message,
+                    "created_at": int(session.created_at * 1000),
+                    "last_activity": int(session.last_activity * 1000),
+                    "is_current": session == manager.current_session,
+                    "has_websocket": session.websocket is not None,
+                }
+                sessions_data.append(session_info)
+            
+            debug_log(f"返回 {len(sessions_data)} 個活躍會話")
+            return JSONResponse(content={"sessions": sessions_data})
+            
+        except Exception as e:
+            debug_log(f"獲取活躍會話失敗: {e}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": f"Failed to get active sessions: {e!s}",
+                    "messageCode": get_msg_code("get_sessions_failed"),
+                },
+            )
+
+    @manager.app.post("/api/switch-session")
+    async def switch_session(request: Request):
+        """切換到指定會話"""
+        try:
+            data = await request.json()
+            session_id = data.get("session_id")
+            
+            if not session_id:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": "Missing session_id",
+                        "messageCode": get_msg_code("invalid_session_id"),
+                    },
+                )
+            
+            success = manager.switch_to_session(session_id)
+            
+            if success:
+                debug_log(f"成功切換到會話: {session_id}")
+                return JSONResponse(
+                    content={
+                        "status": "success",
+                        "session_id": session_id,
+                        "messageCode": get_msg_code("session_switched"),
+                    }
+                )
+            else:
+                return JSONResponse(
+                    status_code=404,
+                    content={
+                        "error": "Session not found or not active",
+                        "messageCode": get_msg_code("session_not_found"),
+                    },
+                )
+                
+        except Exception as e:
+            debug_log(f"切換會話失敗: {e}")
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "error": f"Failed to switch session: {e!s}",
+                    "messageCode": get_msg_code("switch_session_failed"),
+                },
+            )
+
     @manager.app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket, lang: str = "zh-TW"):
         """WebSocket 端點 - 重構後移除 session_id 依賴"""
