@@ -384,26 +384,6 @@ class WebUIManager:
 
         return session_id
 
-        # 設置為當前活躍會話
-        self.current_session = session
-        # 同時保存到字典中以保持向後兼容
-        self.sessions[session_id] = session
-
-        debug_log(f"創建新的活躍會話: {session_id}")
-        debug_log(f"繼承 {len(session.active_tabs)} 個活躍標籤頁")
-
-        # 處理WebSocket連接轉移
-        if old_websocket:
-            # 直接轉移連接到新會話，消息發送由 smart_open_browser 統一處理
-            session.websocket = old_websocket
-            debug_log("已將舊 WebSocket 連接轉移到新會話")
-        else:
-            # 沒有舊連接，標記需要發送會話更新通知（當新 WebSocket 連接建立時）
-            self._pending_session_update = True
-            debug_log("沒有舊 WebSocket 連接，設置待更新標記")
-
-        return session_id
-
     def get_session(self, session_id: str) -> WebFeedbackSession | None:
         """獲取回饋會話 - 保持向後兼容"""
         return self.sessions.get(session_id)
